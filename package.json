@@ -5,7 +5,8 @@
   "private": true,
   "scripts": {
     "dev": "node scripts/local-server.js",
-    "preview": "node scripts/local-server.js"
+    "preview": "node scripts/local-server.js",
+    "convert:webp": "node scripts/convert-frames-to-webp.js"
   },
   "keywords": [
     "portfolio",
@@ -15,5 +16,8 @@
     "animation-frames"
   ],
   "author": "",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "sharp": "^0.35.5"
+  }
 }

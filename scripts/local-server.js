@@ -71,9 +71,10 @@ function serveFile(filePath, res) {
       return;
     }
 
+    const isImage = ext === '.webp' || ext === '.png' || ext === '.jpg' || ext === '.jpeg';
     res.writeHead(200, {
       'Content-Type': contentType,
-      'Cache-Control': ext === '.png' ? 'public, max-age=86400' : 'no-cache',
+      'Cache-Control': isImage ? 'public, max-age=86400' : 'no-cache',
       'Access-Control-Allow-Origin': '*'
     });
     res.end(content);

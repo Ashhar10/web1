@@ -242,7 +242,7 @@
   // ==========================================================================
   function getFramePath(index) {
     const padded = String(index).padStart(3, '0');
-    return `public/assets/frames/frame_${padded}.png`;
+    return `public/assets/frames/frame_${padded}.webp`;
   }
 
   function loadSingleFrame(index) {
@@ -251,6 +251,7 @@
         resolve(frameImages.get(index));
         return;
       }
+      const padded = String(index).padStart(3, '0');
       const img = new Image();
       img.src = getFramePath(index);
       img.onload = () => {
@@ -260,15 +261,27 @@
         resolve(img);
       };
       img.onerror = () => {
-        const fallbackSrc = `assets/frames/frame_${String(index).padStart(3, '0')}.png`;
-        img.src = fallbackSrc;
+        // Fallback 1: Root-relative assets path with webp
+        const fallbackWebp = `assets/frames/frame_${padded}.webp`;
+        img.src = fallbackWebp;
         img.onload = () => {
           frameImages.set(index, img);
           loadedFramesCount++;
           updateProgress();
           resolve(img);
         };
-        img.onerror = () => resolve(null);
+        img.onerror = () => {
+          // Fallback 2: Legacy PNG fallback if webp is unavailable
+          const fallbackPng = `public/assets/frames/frame_${padded}.png`;
+          img.src = fallbackPng;
+          img.onload = () => {
+            frameImages.set(index, img);
+            loadedFramesCount++;
+            updateProgress();
+            resolve(img);
+          };
+          img.onerror = () => resolve(null);
+        };
       };
     });
   }

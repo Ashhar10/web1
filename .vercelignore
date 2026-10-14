@@ -1,0 +1,23 @@
+# Development scripts & tooling
+scripts/
+local-server.js
+
+# Documentation & repository metadata
+README.md
+.gitattributes
+.gitignore
+
+# Environment & logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.env
+.env*.local
+
+# Dependencies
+node_modules/
+
+# PNG Backup frames (local only, do not deploy to Vercel)
+public/assets/frames_png_backup/
+
