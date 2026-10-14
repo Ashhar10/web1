@@ -1,0 +1,19 @@
+{
+  "name": "portfolio-interactive-avatar",
+  "version": "1.0.0",
+  "description": "Interactive cursor-tracked portfolio avatar with 138 smooth frames and state transitions",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [
+    "portfolio",
+    "interactive-avatar",
+    "cursor-tracking",
+    "canvas",
+    "animation-frames"
+  ],
+  "author": "",
+  "license": "MIT"
+}
