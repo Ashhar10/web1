@@ -2,13 +2,22 @@
   "cleanUrls": true,
   "rewrites": [
     {
-      "source": "/public/assets/:path*",
-      "destination": "/assets/:path*"
+      "source": "/assets/:path*",
+      "destination": "/public/assets/:path*"
     }
   ],
   "headers": [
     {
-      "source": "/assets/frames/(.*)",
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        }
+      ]
+    },
+    {
+      "source": "/(public/)?assets/frames/(.*)",
       "headers": [
         {
           "key": "Cache-Control",
