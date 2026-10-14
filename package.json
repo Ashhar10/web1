@@ -1,11 +1,10 @@
 {
   "name": "portfolio-interactive-avatar",
   "version": "1.0.0",
-  "description": "Interactive cursor-tracked portfolio avatar with 138 smooth frames and state transitions",
-  "main": "server.js",
+  "description": "Interactive cursor-tracked portfolio avatar with 135 smooth frames and clockwise head rotation",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
+    "start": "node local-server.js",
+    "dev": "node local-server.js"
   },
   "keywords": [
     "portfolio",
