@@ -7,7 +7,7 @@
 (() => {
   'use strict';
 
-  const TOTAL_FRAMES = 135;
+  const TOTAL_FRAMES = 189;
 
   // Frame sectors specified by user:
   // - 001 to 019: UP (12 PM)
@@ -79,10 +79,23 @@
   // DOM Elements
   const canvas = document.getElementById('avatar-canvas');
   const ctx = canvas.getContext('2d');
+  const ambientCanvas = document.getElementById('ambient-canvas');
+  const ambientCtx = ambientCanvas ? ambientCanvas.getContext('2d') : null;
   const cursorGlow = document.getElementById('cursor-glow');
   const cursorDot = document.getElementById('cursor-dot');
-  const topLoader = document.getElementById('top-loader');
-  const topLoaderBar = document.getElementById('top-loader-bar');
+
+  // High-Impact Editorial Split Loader Elements
+  const splitLoader = document.getElementById('split-loader');
+  const strokeNumTop = document.getElementById('stroke-num-top');
+  const strokeNumBottom = document.getElementById('stroke-num-bottom');
+
+  let isLoaderDismissed = false;
+  let isLoaderReady = false;
+  let displayedPercent = 0;
+  let targetProgressPct = 0;
+  let progressAnimFrame = null;
+  let hasPausedAt78 = false;
+  let isPausedAt78 = false;
 
   // ==========================================================================
   // 1. Transition Graph Construction & Dijkstra Pathfinding
@@ -106,6 +119,12 @@
 
     // 2. Center / Smile branch (126 to 135)
     for (let i = 126; i < 135; i++) {
+      graph.get(i).push({ node: i + 1, weight: 1.0 });
+      graph.get(i + 1).push({ node: i, weight: 1.0 });
+    }
+
+    // 3. Extended Frames (135 to 189)
+    for (let i = 135; i < TOTAL_FRAMES; i++) {
       graph.get(i).push({ node: i + 1, weight: 1.0 });
       graph.get(i + 1).push({ node: i, weight: 1.0 });
     }
@@ -161,8 +180,68 @@
   initGraph();
 
   // ==========================================================================
-  // 2. Responsive Canvas Sizing (MacBook, PC, 4K, Ultrawide, Mobile)
+  // 2. Responsive Framing & Ambient Infinite Blur Engine
   // ==========================================================================
+  function updateAvatarFraming() {
+    const cw = canvas.width;
+    const ch = canvas.height;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+    const imgW = 1920;
+    const imgH = 1080;
+    const imgRatio = imgW / imgH; // ~1.777 (16:9)
+    const screenRatio = cw / ch;
+
+    // Dynamic focal point of face across frames:
+    // In frames 1-135, face is centered (~0.50)
+    // In scroll frames 136-189, face shifts to the right side (~0.82)
+    let focalNormX = 0.50;
+    let focalNormY = 0.38;
+
+    if (currentFrame > 135) {
+      const scrollRatio = Math.max(0, Math.min(1, (currentFrame - 135) / (TOTAL_FRAMES - 135)));
+      focalNormX = lerp(0.50, 0.82, scrollRatio);
+      focalNormY = lerp(0.38, 0.40, scrollRatio);
+    }
+
+    let dw, dh, dx, dy;
+
+    if (screenRatio >= imgRatio) {
+      // Wide / Ultrawide / Desktop Landscape: Fit sides edge-to-edge to the screen!
+      // dw = cw so left side touches x=0 and right side touches x=cw with zero side gaps
+      const scale = cw / imgW;
+      dw = cw;
+      dh = imgH * scale;
+      dx = 0;
+      // Keep hair and face naturally framed near top
+      dy = Math.min(0, (ch - dh) * 0.10);
+    } else {
+      // Mobile / Portrait / Tablet: Fill height and intelligently center on the active face focal point
+      const scale = ch / imgH;
+      dw = imgW * scale;
+      dh = ch;
+
+      // On mobile / tall screens, dw > cw. Center screen around the active focal point
+      const desiredScreenCenterX = cw * 0.5;
+      const targetDx = desiredScreenCenterX - (focalNormX * dw);
+
+      // Clamp so image covers viewport without creating empty gaps
+      const minDx = cw - dw;
+      const maxDx = 0;
+      dx = Math.max(minDx, Math.min(maxDx, targetDx));
+      dy = 0;
+    }
+
+    avatarMetrics = {
+      dw,
+      dh,
+      dx,
+      dy,
+      faceX: (dx + focalNormX * dw) / dpr,
+      faceY: (dy + focalNormY * dh) / dpr
+    };
+  }
+
   function resizeCanvas() {
     const sw = window.innerWidth;
     const sh = window.innerHeight;
@@ -171,61 +250,130 @@
     canvas.width = Math.round(sw * dpr);
     canvas.height = Math.round(sh * dpr);
 
-    const cw = canvas.width;
-    const ch = canvas.height;
-
-    const imgW = 1920;
-    const imgH = 1080;
-    const imgRatio = imgW / imgH; // ~1.777 (16:9)
-    const screenRatio = cw / ch;
-
-    let dw, dh, dx, dy;
-
-    if (screenRatio >= imgRatio) {
-      // Screen is wider than 16:9 (16:9 standard, 21:9 ultrawide, 32:9)
-      // Scale by height so the head and torso are fully framed
-      dh = ch;
-      dw = ch * imgRatio;
-      dx = (cw - dw) / 2;
-      dy = 0;
-    } else {
-      // Screen is taller than 16:9 (MacBook 16:10, 3:2, iPad 4:3, mobile)
-      // Scale by width and keep hair comfortably below the top edge
-      const scale = Math.max(cw / imgW, ch / imgH);
-      dw = imgW * scale;
-      dh = imgH * scale;
-      dx = (cw - dw) / 2;
-      dy = (ch - dh) * 0.18; // 18% offset keeps head/hair (Y=71..94) visible
+    if (ambientCanvas) {
+      ambientCanvas.width = 480;
+      ambientCanvas.height = 270;
     }
 
-    avatarMetrics = {
-      dw,
-      dh,
-      dx,
-      dy,
-      // Face center coordinates converted back to screen CSS pixels
-      faceX: (dx + 948 * (dw / imgW)) / dpr,
-      faceY: (dy + 410 * (dh / imgH)) / dpr
-    };
-
+    updateAvatarFraming();
     renderFrame(currentFrame);
   }
 
   window.addEventListener('resize', resizeCanvas);
   window.addEventListener('orientationchange', resizeCanvas);
 
+  function renderAmbientBackdrop(imgA, imgB, blendT) {
+    if (!ambientCanvas || !ambientCtx) return;
+    const aw = ambientCanvas.width;
+    const ah = ambientCanvas.height;
+
+    ambientCtx.clearRect(0, 0, aw, ah);
+    ambientCtx.globalAlpha = 1;
+    ambientCtx.drawImage(imgA, 0, 0, aw, ah);
+
+    if (imgB && imgB.complete && blendT > 0.005) {
+      ambientCtx.globalAlpha = Math.min(1, blendT);
+      ambientCtx.drawImage(imgB, 0, 0, aw, ah);
+      ambientCtx.globalAlpha = 1;
+    }
+  }
+
+  function applyEdgeFeathering() {
+    const { dx, dy, dw, dh } = avatarMetrics;
+    const cw = canvas.width;
+    const ch = canvas.height;
+
+    // Apply horizontal edge feathering when sharp frame has empty pillar space on sides
+    if (dx > 1 || (dx + dw) < cw - 1) {
+      const featherW = Math.min(160, dw * 0.12);
+      const grad = ctx.createLinearGradient(dx, 0, dx + dw, 0);
+
+      if (dx > 1) {
+        grad.addColorStop(0, 'rgba(0,0,0,0)');
+        grad.addColorStop(Math.min(0.25, featherW / dw), 'rgba(0,0,0,1)');
+      } else {
+        grad.addColorStop(0, 'rgba(0,0,0,1)');
+      }
+
+      if ((dx + dw) < cw - 1) {
+        grad.addColorStop(Math.max(0.75, 1 - (featherW / dw)), 'rgba(0,0,0,1)');
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
+      } else {
+        grad.addColorStop(1, 'rgba(0,0,0,1)');
+      }
+
+      ctx.globalCompositeOperation = 'destination-in';
+      ctx.fillStyle = grad;
+      ctx.fillRect(dx, dy, dw, dh);
+      ctx.globalCompositeOperation = 'source-over';
+    }
+
+    // Apply vertical edge feathering if letterboxed on top/bottom
+    if (dy > 1 || (dy + dh) < ch - 1) {
+      const featherH = Math.min(120, dh * 0.10);
+      const gradV = ctx.createLinearGradient(0, dy, 0, dy + dh);
+
+      if (dy > 1) {
+        gradV.addColorStop(0, 'rgba(0,0,0,0)');
+        gradV.addColorStop(Math.min(0.25, featherH / dh), 'rgba(0,0,0,1)');
+      } else {
+        gradV.addColorStop(0, 'rgba(0,0,0,1)');
+      }
+
+      if ((dy + dh) < ch - 1) {
+        gradV.addColorStop(Math.max(0.75, 1 - (featherH / dh)), 'rgba(0,0,0,1)');
+        gradV.addColorStop(1, 'rgba(0,0,0,0)');
+      } else {
+        gradV.addColorStop(1, 'rgba(0,0,0,1)');
+      }
+
+      ctx.globalCompositeOperation = 'destination-in';
+      ctx.fillStyle = gradV;
+      ctx.fillRect(dx, dy, dw, dh);
+      ctx.globalCompositeOperation = 'source-over';
+    }
+  }
+
   function renderFrame(frameIndex) {
-    let img = frameImages.get(frameIndex) || findNearestLoadedImage(frameIndex);
-    if (!img || !img.complete) return;
+    renderFrameBlended(frameIndex, frameIndex, 0);
+  }
+
+  function renderFrameBlended(frameA, frameB, blendT = 0) {
+    updateAvatarFraming();
 
     const cw = canvas.width;
     const ch = canvas.height;
 
-    // Fill background with exact frame border tone (#ebe7e0) for seamless edges
-    ctx.fillStyle = '#ebe7e0';
-    ctx.fillRect(0, 0, cw, ch);
+    // Clear sharp foreground canvas so ambient blur canvas shines through on the sides
+    ctx.clearRect(0, 0, cw, ch);
 
-    ctx.drawImage(img, avatarMetrics.dx, avatarMetrics.dy, avatarMetrics.dw, avatarMetrics.dh);
+    const imgA = frameImages.get(frameA) || findNearestLoadedImage(frameA);
+    const imgB = (frameB && frameB !== frameA) ? (frameImages.get(frameB) || findNearestLoadedImage(frameB)) : null;
+
+    if (!imgA || !imgA.complete) return;
+
+    // 1. Draw dynamic ambient infinite blur backdrop
+    renderAmbientBackdrop(imgA, imgB, blendT);
+
+    // 2. Draw sharp foreground avatar
+    if (!imgB || !imgB.complete || blendT <= 0.005) {
+      ctx.globalAlpha = 1;
+      ctx.drawImage(imgA, avatarMetrics.dx, avatarMetrics.dy, avatarMetrics.dw, avatarMetrics.dh);
+    } else if (blendT >= 0.995) {
+      ctx.globalAlpha = 1;
+      ctx.drawImage(imgB, avatarMetrics.dx, avatarMetrics.dy, avatarMetrics.dw, avatarMetrics.dh);
+    } else {
+      // Photographic sub-frame cross-fade blend
+      ctx.globalAlpha = 1;
+      ctx.drawImage(imgA, avatarMetrics.dx, avatarMetrics.dy, avatarMetrics.dw, avatarMetrics.dh);
+
+      ctx.globalAlpha = blendT;
+      ctx.drawImage(imgB, avatarMetrics.dx, avatarMetrics.dy, avatarMetrics.dw, avatarMetrics.dh);
+      ctx.globalAlpha = 1;
+    }
+
+    // 3. Feather edges so sharp image melts seamlessly into the infinite ambient blur
+    applyEdgeFeathering();
   }
 
   function findNearestLoadedImage(targetIdx) {
@@ -286,20 +434,127 @@
     });
   }
 
+  // ==========================================================================
+  // High-Impact Editorial Split Loader Engine (78% Fit Screen & Page Split)
+  // ==========================================================================
+
+  function setLoaderNumber(val) {
+    const formatted = val >= 100 ? '100' : String(Math.floor(val)).padStart(2, '0');
+    if (strokeNumTop) strokeNumTop.textContent = formatted;
+    if (strokeNumBottom) strokeNumBottom.textContent = formatted;
+  }
+
   function updateProgress() {
-    const pct = Math.round((loadedFramesCount / TOTAL_FRAMES) * 100);
-    topLoaderBar.style.width = `${pct}%`;
-    if (pct >= 100) {
-      setTimeout(() => {
-        topLoader.classList.add('fade-out');
-        setTimeout(() => { topLoader.style.display = 'none'; }, 500);
-      }, 250);
+    targetProgressPct = Math.min(100, (loadedFramesCount / TOTAL_FRAMES) * 100);
+    startSplitTimerLoop();
+  }
+
+  function startSplitTimerLoop() {
+    if (progressAnimFrame) return;
+
+    function step() {
+      if (!isPausedAt78) {
+        // If approaching 78% and haven't triggered the pause yet
+        if (!hasPausedAt78 && displayedPercent >= 77.2 && displayedPercent < 78.5) {
+          triggerPauseAt78();
+        } else {
+          // If haven't paused at 78 yet, cap advance at 78
+          const maxAllowed = (!hasPausedAt78) ? 78 : targetProgressPct;
+          const diff = Math.min(targetProgressPct, maxAllowed) - displayedPercent;
+
+          if (diff > 0.05) {
+            displayedPercent += Math.max(0.12, diff * 0.14);
+          } else {
+            displayedPercent = Math.min(targetProgressPct, maxAllowed);
+          }
+
+          const rounded = Math.floor(displayedPercent);
+          setLoaderNumber(rounded);
+
+          // Trigger pause at 78
+          if (!hasPausedAt78 && rounded === 78) {
+            triggerPauseAt78();
+          }
+
+          if (rounded >= 100 && !isLoaderReady) {
+            markSplitLoaderReady();
+          }
+        }
+      }
+
+      if (!isLoaderDismissed) {
+        progressAnimFrame = requestAnimationFrame(step);
+      }
+    }
+
+    progressAnimFrame = requestAnimationFrame(step);
+  }
+
+  function triggerPauseAt78() {
+    hasPausedAt78 = true;
+    isPausedAt78 = true;
+    displayedPercent = 78;
+    setLoaderNumber(78);
+
+    // Expand to fit entire screen!
+    if (splitLoader) {
+      splitLoader.classList.add('screen-fit');
+    }
+
+    // Hold at 78% while screen-fitting for ~850ms
+    setTimeout(() => {
+      resumeFromPauseAt78();
+    }, 850);
+  }
+
+  function resumeFromPauseAt78() {
+    if (!isPausedAt78) return;
+    isPausedAt78 = false;
+
+    // Scale down back to standard size and continue to 100
+    if (splitLoader) {
+      splitLoader.classList.remove('screen-fit');
     }
   }
 
+  function markSplitLoaderReady() {
+    if (isLoaderReady) return;
+    isLoaderReady = true;
+
+    displayedPercent = 100;
+    setLoaderNumber(100);
+
+    // Hold 100 briefly, then trigger the Number Break & Page Split!
+    setTimeout(() => {
+      triggerPageSplit();
+    }, 280);
+  }
+
+  function triggerPageSplit() {
+    if (isLoaderDismissed) return;
+    isLoaderDismissed = true;
+
+    if (progressAnimFrame) {
+      cancelAnimationFrame(progressAnimFrame);
+      progressAnimFrame = null;
+    }
+
+    // Trigger Page Split Animation (Top half slides UP, Bottom half slides DOWN, breaking the number)
+    if (splitLoader) {
+      splitLoader.classList.add('splitting');
+    }
+
+    // Remove from interaction tree once split curtains clear the screen
+    setTimeout(() => {
+      if (splitLoader) {
+        splitLoader.style.display = 'none';
+      }
+    }, 950);
+  }
+
   async function preloadAllFrames() {
-    // Stage 1: Load main anchors across clock and center first for immediate interactivity
-    const priorityIndices = [128, 135, 1, 10, 25, 42, 60, 70, 80, 95, 110, 120, 125];
+    // Stage 1: Load main anchors across clock, center, and scroll sequence first for immediate interactivity
+    const priorityIndices = [128, 135, 136, 155, 175, 189, 1, 10, 25, 42, 60, 70, 80, 95, 110, 120, 125];
     await Promise.all(priorityIndices.map(idx => loadSingleFrame(idx)));
 
     // Draw initial center neutral frame immediately
@@ -351,6 +606,7 @@
     // Immediately update cursor dot position
     cursorDot.style.left = `${clientX}px`;
     cursorDot.style.top = `${clientY}px`;
+
   }
 
   // Map clock angle (0° to 360°) to the exact frame range
@@ -439,7 +695,31 @@
   }
 
   // ==========================================================================
-  // 5. 60 FPS Render & Path Stepper Loop
+  // 5. Scroll-to-Play Engine (Frames 136 to 189 over ~3 scrolls)
+  // ==========================================================================
+  const SCROLL_CONFIG = {
+    // 3 standard mouse wheel turns (~120px each = 360px total distance)
+    maxScroll: 360,
+    damping: 0.14,
+    anchorFrame: 135,   // Frame 135 acts as seamless bridge from cursor to scroll
+    startFrame: 136,    // First frame of extended sequence
+    endFrame: 189       // Final frame of sequence
+  };
+
+  let scrollTarget = 0;
+  let scrollCurrent = 0;
+  let isScrollMode = false;
+  let scrollBlendWeight = 0; // 0 = cursor mode, 1 = scroll sequence mode
+  let preScrollFrame = 128;
+  let lastTouchY = null;
+
+  function applyScrollDelta(delta) {
+    if (!isLoaderDismissed) return;
+    scrollTarget = Math.max(0, Math.min(SCROLL_CONFIG.maxScroll, scrollTarget + delta));
+  }
+
+  // ==========================================================================
+  // 6. 60 FPS Render & Animation Loop
   // ==========================================================================
   let lastFrameStepTime = 0;
 
@@ -452,37 +732,90 @@
     cursorGlow.style.left = `${mouse.smoothX}px`;
     cursorGlow.style.top = `${mouse.smoothY}px`;
 
-    evaluateTarget();
+    // Smooth scroll inertia / physics damping
+    scrollCurrent += (scrollTarget - scrollCurrent) * SCROLL_CONFIG.damping;
+    if (Math.abs(scrollTarget - scrollCurrent) < 0.08) {
+      scrollCurrent = scrollTarget;
+    }
 
-    // Step through shortest path towards targetFrame
-    if (currentFrame !== targetFrame) {
-      // Re-route shortest path if destination changed
-      if (activePath.length === 0 || activePath[activePath.length - 1] !== targetFrame) {
-        activePath = findShortestPath(currentFrame, targetFrame);
-        if (activePath.length > 0 && activePath[0] === currentFrame) {
-          activePath.shift();
+    const hasActiveScroll = scrollTarget > 0 || scrollCurrent > 0.08;
+
+    if (hasActiveScroll) {
+      // --- SCROLL PLAY MODE (Frames 136 to 189) ---
+      if (!isScrollMode) {
+        isScrollMode = true;
+        preScrollFrame = currentFrame;
+        scrollBlendWeight = 0;
+      }
+
+      // Smoothly blend in from preScrollFrame into the scroll sequence
+      scrollBlendWeight = Math.min(1, scrollBlendWeight + 0.14);
+
+      // Map scroll 0 -> maxScroll to frames 135 -> 189
+      // Frame 135 is the seamless bridge, blending immediately into 136..189
+      const scrollT = Math.max(0, Math.min(1, scrollCurrent / SCROLL_CONFIG.maxScroll));
+      const exactFrame = SCROLL_CONFIG.anchorFrame + scrollT * (SCROLL_CONFIG.endFrame - SCROLL_CONFIG.anchorFrame);
+
+      const fFloor = Math.floor(exactFrame);
+      const fCeil = Math.min(SCROLL_CONFIG.endFrame, fFloor + 1);
+      const fFraction = exactFrame - fFloor;
+
+      if (scrollBlendWeight < 0.99) {
+        // Blend from the previous cursor face into the current scroll frame
+        renderFrameBlended(preScrollFrame, fFloor, scrollBlendWeight);
+      } else {
+        // Full sub-frame continuous blending across frames 136-189
+        renderFrameBlended(fFloor, fCeil, fFraction);
+      }
+
+      currentFrame = Math.round(exactFrame);
+    } else {
+      // --- CURSOR INTERACTIVE MODE (Frames 1 to 135) ---
+      if (isScrollMode) {
+        // Smoothly blend out from scroll sequence back to cursor frame
+        scrollBlendWeight = Math.max(0, scrollBlendWeight - 0.14);
+        if (scrollBlendWeight <= 0.01) {
+          isScrollMode = false;
+          scrollBlendWeight = 0;
         }
       }
 
-      if (activePath.length > 0) {
-        // Dynamic step speed based on distance to keep animation fluid and responsive
-        const pathLen = activePath.length;
-        const stepIntervalMs = pathLen > 18 ? 10 : (pathLen > 8 ? 14 : config.baseStepMs);
+      evaluateTarget();
 
-        if (timestamp - lastFrameStepTime >= stepIntervalMs) {
-          lastFrameStepTime = timestamp;
-          const nextFrame = activePath.shift();
-          if (nextFrame !== undefined) {
-            currentFrame = nextFrame;
-            renderFrame(currentFrame);
+      // Step through shortest path towards targetFrame
+      if (currentFrame !== targetFrame) {
+        if (activePath.length === 0 || activePath[activePath.length - 1] !== targetFrame) {
+          activePath = findShortestPath(currentFrame, targetFrame);
+          if (activePath.length > 0 && activePath[0] === currentFrame) {
+            activePath.shift();
           }
         }
+
+        if (activePath.length > 0) {
+          const pathLen = activePath.length;
+          const stepIntervalMs = pathLen > 18 ? 10 : (pathLen > 8 ? 14 : config.baseStepMs);
+
+          if (timestamp - lastFrameStepTime >= stepIntervalMs) {
+            lastFrameStepTime = timestamp;
+            const nextFrame = activePath.shift();
+            if (nextFrame !== undefined) {
+              currentFrame = nextFrame;
+            }
+          }
+        }
+      }
+
+      if (scrollBlendWeight > 0.01) {
+        // Blend transition back from anchor 135 to current cursor frame
+        renderFrameBlended(currentFrame, SCROLL_CONFIG.anchorFrame, scrollBlendWeight);
+      } else {
+        renderFrame(currentFrame);
       }
     }
   }
 
   // ==========================================================================
-  // 6. User Event Listeners
+  // 7. User Event Listeners
   // ==========================================================================
   window.addEventListener('mousemove', (e) => {
     updateCursorPosition(e.clientX, e.clientY);
@@ -495,10 +828,32 @@
     updateCursorPosition(avatarMetrics.faceX, avatarMetrics.faceY);
   });
 
-  // Touch Support (Mac trackpad / Touchscreen laptops / Tablets / Phones)
+  // Wheel Scroll Interaction (~3 scrolls from 136 to 189)
+  window.addEventListener('wheel', (e) => {
+    if (!isLoaderDismissed) return;
+
+    let delta = e.deltaY;
+    if (e.deltaMode === 1) delta *= 28;      // Lines mode
+    else if (e.deltaMode === 2) delta *= 300; // Pages mode
+
+    applyScrollDelta(delta);
+  }, { passive: true });
+
+  // Keyboard navigation
+  window.addEventListener('keydown', (e) => {
+    if (!isLoaderDismissed) return;
+    if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') {
+      applyScrollDelta(120);
+    } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {
+      applyScrollDelta(-120);
+    }
+  });
+
+  // Touch Support (Touchscreen laptops, Tablets, Phones)
   window.addEventListener('touchstart', (e) => {
     if (e.touches.length > 0) {
       const touch = e.touches[0];
+      lastTouchY = touch.clientY;
       updateCursorPosition(touch.clientX, touch.clientY);
     }
   }, { passive: true });
@@ -506,17 +861,28 @@
   window.addEventListener('touchmove', (e) => {
     if (e.touches.length > 0) {
       const touch = e.touches[0];
+      if (lastTouchY !== null && isLoaderDismissed) {
+        const dy = lastTouchY - touch.clientY;
+        lastTouchY = touch.clientY;
+        if (Math.abs(dy) > 1) {
+          applyScrollDelta(dy * 1.6);
+        }
+      }
       updateCursorPosition(touch.clientX, touch.clientY);
     }
   }, { passive: true });
 
   window.addEventListener('touchend', () => {
-    // Return to center neutral & smile
+    lastTouchY = null;
     updateCursorPosition(avatarMetrics.faceX, avatarMetrics.faceY);
   });
 
   // Click Ripple & Smile Reaction
   window.addEventListener('pointerdown', (e) => {
+    if (isLoaderReady && !isLoaderDismissed) {
+      triggerPageSplit();
+    }
+
     const ripple = document.createElement('div');
     ripple.className = 'click-ripple';
     ripple.style.left = `${e.clientX}px`;
@@ -527,14 +893,16 @@
     document.body.appendChild(ripple);
     setTimeout(() => ripple.remove(), 650);
 
-    // Trigger smile reaction on click
-    activeState = 'SMILE';
-    targetFrame = 135;
-    mouse.lastMoveTime = performance.now();
+    // Trigger smile reaction on click if not actively scrolling
+    if (!isScrollMode) {
+      activeState = 'SMILE';
+      targetFrame = 135;
+      mouse.lastMoveTime = performance.now();
+    }
   });
 
   // ==========================================================================
-  // 7. Initialize
+  // 8. Initialize
   // ==========================================================================
   async function init() {
     resizeCanvas();

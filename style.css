@@ -5,8 +5,7 @@
    ========================================================================== */
 
 :root {
-  /* Updated exact background tone matching the new 135-frame rendered edges */
-  --bg-frame: #ebe7e0;
+  --bg-frame: #0d0e12;
   --accent-dot: #0f172a;
   --accent-cyan: #0284c7;
   --accent-glow: rgba(99, 102, 241, 0.15);
@@ -23,14 +22,28 @@ html, body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background-color: var(--bg-frame);
+  background-color: #0b0c10;
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
   cursor: none; /* Hide OS cursor in favor of custom interactive cursor effect */
 }
 
-/* Fullscreen Canvas */
+/* Ambient Infinite Blur Canvas (Dynamic GPU-accelerated background) */
+#ambient-canvas {
+  position: fixed;
+  inset: -6vw -6vh;
+  width: calc(100vw + 12vw);
+  height: calc(100vh + 12vh);
+  display: block;
+  z-index: 0;
+  filter: blur(55px) saturate(1.3) brightness(0.92);
+  transform: scale(1.06);
+  pointer-events: none;
+  will-change: filter, transform;
+}
+
+/* Fullscreen Foreground Avatar Canvas */
 #avatar-canvas {
   position: fixed;
   inset: 0;
@@ -114,29 +127,112 @@ html, body {
 }
 
 /* ==========================================================================
-   Minimalist Loading Bar at Top Edge
+   High-Impact Editorial Split Loader (Pure Outlined Numbers & Split Screen)
    ========================================================================== */
-.top-loader {
+.split-loader {
   position: fixed;
-  top: 0;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 9999;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  background: transparent;
+  pointer-events: none;
+}
+
+/* Two horizontal shutters that split and slide apart */
+.split-pane {
+  position: absolute;
   left: 0;
   width: 100vw;
-  height: 3px;
-  background: rgba(0, 0, 0, 0.05);
-  z-index: 999;
-  pointer-events: none;
-  transition: opacity 0.5s ease;
+  height: 50vh;
+  background: #000000;
+  overflow: hidden;
+  will-change: transform;
+  transition: transform 0.85s cubic-bezier(0.85, 0, 0.15, 1);
 }
 
-.top-loader.fade-out {
+.split-top {
+  top: 0;
+  transform: translateY(0);
+}
+
+.split-bottom {
+  bottom: 0;
+  transform: translateY(0);
+}
+
+/* Page split curtain triggers */
+.split-loader.splitting .split-top {
+  transform: translateY(-100%);
+}
+
+.split-loader.splitting .split-bottom {
+  transform: translateY(100%);
+}
+
+/* Inner containers aligned so the numbers match seamlessly at the 50% seam */
+.split-inner {
+  position: absolute;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.split-top .split-inner {
+  top: 0;
+}
+
+.split-bottom .split-inner {
+  bottom: 0;
+}
+
+/* Outlined numbers only - Zero extra text (Ultra-thin crisp hairline) */
+.stroke-number {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Impact', 'Arial Black', sans-serif;
+  font-weight: 900;
+  font-size: clamp(100px, 18vw, 220px);
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: transparent;
+  -webkit-text-stroke: 1.2px rgba(255, 255, 255, 0.92);
+  text-stroke: 1.2px rgba(255, 255, 255, 0.92);
+  font-variant-numeric: tabular-nums;
+  transform-origin: center center;
+  transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1),
+              color 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+              -webkit-text-stroke 0.4s ease;
+  will-change: transform, color, -webkit-text-stroke;
+}
+
+/* When 78 comes: Solid filled white & massively expanded to dominate the entire screen! */
+.split-loader.screen-fit .stroke-number {
+  transform: scale(4.4);
+  color: #ffffff;
+  -webkit-text-stroke: 1.5px #ffffff;
+  text-stroke: 1.5px #ffffff;
+}
+
+/* Subtle hairline slice seam across center that parts on split */
+.split-seam {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 100vw;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.15);
+  z-index: 10000;
+  transform: translateY(-50%);
+  transition: opacity 0.35s ease;
+}
+
+.split-loader.splitting .split-seam {
   opacity: 0;
-}
-
-.top-loader-bar {
-  width: 0%;
-  height: 100%;
-  background: linear-gradient(90deg, #6366f1, #0284c7, #10b981);
-  transition: width 0.12s ease-out;
 }
 
 /* Mobile & Touch Devices */

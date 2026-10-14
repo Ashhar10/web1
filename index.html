@@ -7,18 +7,30 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <!-- Seamless Fullscreen Canvas -->
+  <!-- Ambient Infinite Blur Background Canvas & Foreground Sharp Canvas -->
+  <canvas id="ambient-canvas"></canvas>
   <canvas id="avatar-canvas"></canvas>
 
   <!-- Interactive Cursor Follower -->
   <div id="cursor-glow" class="cursor-glow"></div>
   <div id="cursor-dot" class="cursor-dot"></div>
 
-  <!-- Minimalist Initial Preload Indicator -->
-  <div id="top-loader" class="top-loader">
-    <div id="top-loader-bar" class="top-loader-bar"></div>
+  <!-- High-Impact Editorial Split Loader (Outlined Numbers Only, Page Split on Complete) -->
+  <div id="split-loader" class="split-loader">
+    <div class="split-pane split-top" id="split-top">
+      <div class="split-inner">
+        <span id="stroke-num-top" class="stroke-number">00</span>
+      </div>
+    </div>
+    <div class="split-pane split-bottom" id="split-bottom">
+      <div class="split-inner">
+        <span id="stroke-num-bottom" class="stroke-number">00</span>
+      </div>
+    </div>
+    <div class="split-seam"></div>
   </div>
 
+  <script src="public/assets/confetti.browser.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

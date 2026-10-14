@@ -19,5 +19,8 @@
   "license": "MIT",
   "devDependencies": {
     "sharp": "^0.35.5"
+  },
+  "dependencies": {
+    "canvas-confetti": "^1.9.4"
   }
 }
